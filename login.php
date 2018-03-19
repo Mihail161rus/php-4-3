@@ -12,33 +12,58 @@ try {
     echo 'Подключение не удалось: ' . $e->getMessage();
 }
 
-/*Регистрация пользователя*/
-if(!empty($_POST['reg_submit'])) {
-    $login = $_POST['login'];
-    $password = md5($_POST['password']);
+/*Функция возвращает массив с искомым логином, если он есть в БД*/
+function getUsersList($db, $login)
+{
+    $sqlSelect = "SELECT id, login, password FROM user WHERE login=?";
+    $statement = $db->prepare($sqlSelect);
+    $statement->execute([$login]);
+    return $statement->fetch(PDO::FETCH_ASSOC);
+}
 
-    $sqlAdd = "INSERT INTO user (login, password) VALUES (?, ?)";
-    $statement = $db->prepare($sqlAdd);
-    $statement->execute([$login, $password]);
-    header('Location: index.php');
-} elseif(!empty($_POST['reg_submit']) && (empty($_POST['login']) || empty($_POST['password']))) {
-    $infoText = 'Вы ввели не все данные для регистрации';
+/*Регистрация пользователя*/
+if (!empty($_POST['reg_submit'])) {
+    if (!empty($_POST['login']) && !empty($_POST['password'])) {
+        $login = $_POST['login'];
+        $password = md5($_POST['password']);
+        $usersArr = getUsersList($db, $login);
+
+        if (empty($usersArr)) {
+            $sqlAdd = "INSERT INTO user (login, password) VALUES (?, ?)";
+            $statement = $db->prepare($sqlAdd);
+            $statement->execute([$login, $password]);
+            $usersArr = getUsersList($db, $login);
+            $_SESSION['login'] = $login;
+            $_SESSION['login_id'] = $usersArr['id'];
+            header('Location: index.php');
+        } else {
+            $infoText = 'Такой пользователь уже есть в базе. Пожалуйста, залогиньтесь';
+        }
+    }
+    if (empty($_POST['login'])) {
+        $infoText = 'Вы не ввели логин. Заполните форму заново';
+    } elseif (empty($_POST['password'])) {
+        $infoText = 'Вы не ввели пароль. Заполните форму заново';
+    }
 }
 
 /*Авторизация пользователя*/
-if(!empty($_POST['auth_submit'])) {
-    $login = $_POST['login'];
-    $password = md5($_POST['password']);
-
-    $sqlSelect = "SELECT * FROM user";
-    $statement = $db->prepare($sqlSelect);
-    $statement->execute();
-    $usersArr = $statement->fetch(PDO::FETCH_ASSOC);
-    echo '<pre>';
-    print_r($usersArr);
-    echo '</pre>';
+if (!empty($_POST['auth_submit'])) {
+    if (!empty($_POST['login']) && !empty($_POST['password'])) {
+        $login = $_POST['login'];
+        $password = md5($_POST['password']);
+        $usersArr = getUsersList($db, $login);
+        if (!empty($usersArr) && $usersArr['password'] === $password) {
+            $_SESSION['login'] = $login;
+            $_SESSION['login_id'] = $usersArr['id'];
+            header('Location: index.php');
+        } else {
+            $infoText = 'Вы ввели неверный логин или пароль';
+        }
+    } else {
+        $infoText = 'Вы ввели не все данные для входа';
+    }
 }
-
 ?>
 
 
@@ -58,5 +83,7 @@ if(!empty($_POST['auth_submit'])) {
         <input name="auth_submit" type="submit" value="Войти">
         <input name="reg_submit" type="submit" value="Регистрация">
     </form>
+
+    <p style="color: red"><?=$infoText?></p>
 </body>
 </html>
